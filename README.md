@@ -19,4 +19,4 @@ Running synchronisation:
 
 Run as a cron job as often as your please:
 
-php console.php pull:worklogs
+    php console.php pull:worklogs 2013-01-01 2013-01-31
