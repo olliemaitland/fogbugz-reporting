@@ -1,0 +1,16 @@
+{
+    "require": {
+        "silex/silex": "1.0.*@dev",
+        "doctrine/dbal": "2.2.*",
+        "symfony/console": "2.1.*",
+        "knplabs/console-service-provider": "dev-master",
+        "monolog/monolog": ">=1.0.0",
+        "guzzle/guzzle": "~3.1.1",
+        "swiftmailer/swiftmailer": ">=4.1.2,<4.2-dev"
+    },
+    "autoload" : {
+        "psr-0" : {
+            "Fogbugz" : "src"
+        }
+    }
+}
