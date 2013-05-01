@@ -21,6 +21,7 @@ $app->register(new ConsoleServiceProvider(), array(
 $application = $app['console'];
 $application->add(new Fogbugz\Console\Command\SetupFogbugzCommand());
 $application->add(new Fogbugz\Console\Command\PullWorklogsCommand());
+$application->add(new Fogbugz\Console\Command\PushWorklogsCommand());
 $application->run();
 
 $app->run();

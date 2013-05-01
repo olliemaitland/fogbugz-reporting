@@ -18,7 +18,6 @@ namespace Fogbugz\Entities;
 class Configuration
 {
     private $configuration = array ();
-    private $isNew = true;
 
     public function __construct($app)
     {
@@ -28,11 +27,6 @@ class Configuration
         $result = $this->db->fetchAll($sql);
         foreach ($result as $row) {
             $this->configuration[$row['parameter']] = $row['value'];
-        }
-        if (false == $this->configuration) {
-            $this->isNew = true;
-        } else {
-            $this->isNew = false;
         }
     }
 
@@ -54,11 +48,12 @@ class Configuration
     {
         foreach ($this->configuration as $k => $v) {
             if (!$v) $v = "";
-            if ($this->isNew) {
+
+            if (($this->db->update("configuration", array("value" => $v), array("parameter" => $k))) === 0) {
                 $this->db->insert("configuration", array("parameter" => $k, "value" => $v));
-                $this->logger->addInfo("Inserted new records");
+                $this->logger->addInfo("Inserted new configuration records");
             } else {
-                $this->db->update("configuration", array("value" => $v), array("parameter" => $k));
+                $this->logger->addInfo("Updated existing configuration records");
             }
         }
     }
@@ -88,5 +83,15 @@ class Configuration
         }
 
         return $this->configuration[$name];
+    }
+
+    /**
+     * Return all the config parameters
+     *
+     * @return array
+     */
+    public function getAll()
+    {
+        return $this->configuration;
     }
 }
