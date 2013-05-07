@@ -175,7 +175,7 @@ class PushWorklogsCommand extends ByngCommand
             )) .
             ") VALUES ('" . implode("','", $csvRow) . "')"
         ;
-        
+
         return $sql;
     }
 
