@@ -20,16 +20,24 @@ class PushWorklogsCommand extends ByngCommand
     const GOOGLE_APP_NAME = 'Byng FogBugz Reporting Tool';
 
     const
-        CSV_PATH  = 'csv-path'  // path to CSV file to be uploaded
+        CSV_PATH    = 'csv-path',   // path to CSV file to be uploaded
+        TABLE_ID    = 'table-id'    // Google Fusion Table ID
     ;
 
-    const TABLE_ID = '1lQiu9hX7Ki4UZf0uA1X3ZBTyvHsWfBRWQ0UPJAk';
+    // table columns
+    const
+        TABLE_COL_PROJECT   = 'Project',
+        TABLE_COL_DAY       = 'Day',
+        TABLE_COL_HOURS     = 'Hours',
+        TABLE_COL_PERSON    = 'Person'
+    ;
 
     protected function configure()
     {
         $this
             ->setName('push:worklogs')
             ->addArgument(self::CSV_PATH, InputArgument::REQUIRED, 'Path to CSV generated with pull:worklogs command to be uploaded')
+            ->addArgument(self::TABLE_ID, InputArgument::REQUIRED, 'Google Fusion table ID to load data into')
         ;
     }
 
@@ -134,8 +142,43 @@ class PushWorklogsCommand extends ByngCommand
             }
         }
 
+        // check table ID to prevent "SQL" injection
+        // sample id 1X4PBLYxV_msgowgDMMWpO_SULzbeJ5mjKGy2Ccw
+        if (!preg_match('/^[0-9a-zA-Z_]+$/', $args[self::TABLE_ID])) {
+            throw new \Exception('Fusion table ID seems to be invalid');
+        }
+
         return $args;
     }
+
+    /**
+     * Returns INSERT statement to add the CSV row given into the specified Fusion table
+     *
+     * @param   string  $tableId
+     * @param   array   $csvRow
+     *
+     * @return  string
+     */
+    protected function getInsertStatement($tableId, $csvRow) {
+        // escape values inserted
+        // table ID is not escape as it is supposed to be obtained in a safe way
+        foreach ($csvRow as $key => $value) {
+            $csvRow[$key] = addslashes($value);
+        }
+
+        $sql =
+            'INSERT INTO ' . $tableId . ' (' . implode(',', array(
+                self::TABLE_COL_PROJECT,
+                self::TABLE_COL_DAY,
+                self::TABLE_COL_HOURS,
+                self::TABLE_COL_PERSON
+            )) .
+            ") VALUES ('" . implode("','", $csvRow) . "')"
+        ;
+        
+        return $sql;
+    }
+
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
@@ -147,7 +190,6 @@ class PushWorklogsCommand extends ByngCommand
         // there is apparently no way to import File via PHP API, method appears incomplete...
         // $importResult = $service->table->importRows(self::TABLE_ID, array('isStrict'  => true));
         //
-        // ...so uploading via SQL then
         // ...so uploading via SQL then
         function runQueries(\Google_FusiontablesService $service, array $queries) {
             $sqlStr = implode(';', $queries);
@@ -164,14 +206,7 @@ class PushWorklogsCommand extends ByngCommand
         $rowCount = 0;
         $sql = array();
         while (($record = fgetcsv($csvFile)) !== false) {
-            $sql[] = 'INSERT INTO ' . self::TABLE_ID . ' (Project, Date, Hours, Person) VALUES (' .
-                // can't find dedicated Fusion Table escaping in the API
-                "'" . addslashes($record[0]) . "'," .
-                "'" . addslashes($record[1]) . "'," .
-                "'" . addslashes($record[2]) . "'," .
-                "'" . addslashes($record[3]) . "'" .
-                ')'
-            ;
+            $sql[] = $this->getInsertStatement($args[self::TABLE_ID], $record);
 
             if (count($sql) >= 5) {
                 $rowCount += runQueries($service, $sql);
