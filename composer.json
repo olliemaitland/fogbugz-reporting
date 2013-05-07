@@ -1,4 +1,17 @@
 {
+    "repositories": [
+        {
+            "type": "package",
+            "package": {
+                "name": "project/google-api-php-client",
+                "source": {
+                    "type": "svn",
+                    "url": "http://google-api-php-client.googlecode.com/svn",
+                    "reference": "trunk"
+                }
+            }
+        }
+    ],
     "require": {
         "silex/silex": "1.0.*@dev",
         "doctrine/dbal": "2.2.*",
@@ -6,7 +19,8 @@
         "knplabs/console-service-provider": "dev-master",
         "monolog/monolog": ">=1.0.0",
         "guzzle/guzzle": "~3.1.1",
-        "swiftmailer/swiftmailer": ">=4.1.2,<4.2-dev"
+        "swiftmailer/swiftmailer": ">=4.1.2,<4.2-dev",
+        "google-api-php-client": ">=1.0.0"
     },
     "autoload" : {
         "psr-0" : {
