@@ -15,13 +15,13 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-class SetupFogbugzCommand extends Command
+class SetupFogbugzCommand extends ByngCommand
 {
     protected function configure()
     {
         $this
             ->setName('setup:fogbugz')
-            ->addArgument('fogbugz-url', InputArgument::REQUIRED, 'Fogbugz API end point URL')
+            ->addArgument('client-id', InputArgument::REQUIRED, 'Fogbugz API end point URL')
             ->addArgument('fogbugz-email', InputArgument::REQUIRED, 'Fogbugz API email')
             ->addArgument('fogbugz-password', InputArgument::REQUIRED, 'Fogbugz API password');
     }
@@ -29,12 +29,10 @@ class SetupFogbugzCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         // save all the arguments
-        $app = $this->getApplication()->getSilexApplication();
-
         $args = $input->getArguments();
         unset($args['command']);
 
-        $configuration = $app['config'];
+        $configuration = $this->getConfig();
         /* @var \Fogbugz\Entities\Configuration $configuration */
         $configuration->fromArray($args);
         $configuration->save();

@@ -1,10 +1,9 @@
 <?php
 /**
- * Created by JetBrains PhpStorm.
- * User: Yuriy Akopov
- * Date: 01/05/13
- * Time: 18:41
- * To change this template use File | Settings | File Templates.
+ * Implements command that pushes data from a selected CSV pulled from Fogbugz to Google Fusion table
+ *
+ * @author  Yuriy Akopov
+ * @date    2013-05-01
  */
 namespace Fogbugz\Console\Command;
 
@@ -14,9 +13,10 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-class PushWorklogsCommand extends Command
+class PushWorklogsCommand extends ByngCommand
 {
-    const GOOGLE_CLIENT_TOKEN_KEY = 'googleClientToken';
+    // name of the application in Google stats etc.
+    const GOOGLE_APP_NAME = 'Byng FogBugz Reporting Tool';
 
     const TABLE_ID = '1lQiu9hX7Ki4UZf0uA1X3ZBTyvHsWfBRWQ0UPJAk';
 
@@ -24,9 +24,37 @@ class PushWorklogsCommand extends Command
     {
         $this
             ->setName('push:worklogs')
-        //    ->addArgument('start-date', InputArgument::REQUIRED, 'Worklog start date')
-        //    ->addArgument('end-date', InputArgument::REQUIRED, 'Worklog end date')
         ;
+    }
+
+    /**
+     * Checks settings storage for Google OAuth credentials and returns them as an array or throws an exception otherwise
+     *
+     * @return  array
+     * @throws  \Exception
+     */
+    public function getGoogleOauthCredentials()
+    {
+        $settings = array(
+            SetupGoogleCommand::GOOGLE_ACCOUNT_CLIENT_ID,
+            SetupGoogleCommand::GOOGLE_ACCOUNT_NAME,
+            SetupGoogleCommand::GOOGLE_ACCOUNT_KEY,
+            SetupGoogleCommand::GOOGLE_ACCOUNT_SECRET
+        );
+
+        $config = $this->getConfig();
+        $oauth  = array();
+
+        foreach ($settings as $param) {
+            try {
+                $oauth[$param] = $config->get($param);
+
+            } catch (\Exception $e) {
+                throw new \Exception('Unable to read Google credentials, please initialise with setup:google command first');
+            }
+        }
+
+        return $oauth;
     }
 
     /**
@@ -37,40 +65,29 @@ class PushWorklogsCommand extends Command
      */
     protected function getFusionTablesService()
     {
-        // @todo: should be included via composer's autoloader
-        $appFolder = dirname(dirname(dirname(dirname(dirname(__FILE__)))));
-        require_once $appFolder . '/vendor/google-api-php-client/src/Google_Client.php';
-        require_once $appFolder . '/vendor/google-api-php-client/src/contrib/Google_FusiontablesService.php';
+        // require_once $appFolder . '/vendor/google-api-php-client/src/Google_Client.php';
+        // require_once $appFolder . '/vendor/google-api-php-client/src/contrib/Google_FusiontablesService.php';
+
+        $oauth = $this->getGoogleOauthCredentials();
 
         $client = new \Google_Client();
+        $client->setClientId($oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_CLIENT_ID]);
+        $client->setApplicationName(self::GOOGLE_APP_NAME);
 
-        // @todo: should be defined in SQLlite config or prod.php
-        $oauth = array(
-            'app_name'      => 'Byng FogBugz Reporting',
-            'client_id'     => '560734462816-ln6javu29l7b2uhtrcsj2fr9e4l4v985.apps.googleusercontent.com',
-            'account_name'  => '560734462816-ln6javu29l7b2uhtrcsj2fr9e4l4v985@developer.gserviceaccount.com',
-            'private_key'   => $appFolder . '/resources/google/oauth-privatekey.p12',
-            'key_secret'    => 'notasecret'
-        );
-
-        $client->setClientId($oauth['client_id']);
-        $client->setApplicationName($oauth['app_name']);
         $client->setAssertionCredentials(new \Google_AssertionCredentials(
-            $oauth['account_name'],
+            $oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_NAME],
             array('https://www.googleapis.com/auth/fusiontables'),
-            file_get_contents($oauth['private_key']),
-            $oauth['key_secret']
+            file_get_contents($oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_KEY]),
+            $oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_SECRET]
         ));
 
         // accessing stored configuration
-        $app = $this->getApplication()->getSilexApplication();
-        /* @var \Fogbugz\Entities\Configuration $config */
-        $config = $app['config'];
+        $config = $this->getConfig();
 
-        // attempting to retrieve an existing token
         $updateToken = false;
         try {
-            $token = $config->get(self::GOOGLE_CLIENT_TOKEN_KEY);
+            // attempting to retrieve an existing token
+            $token = $config->get(SetupGoogleCommand::GOOGLE_TOKEN_KEY);
             $client->setAccessToken($token);
 
         } catch (\Exception $e) {
@@ -82,7 +99,8 @@ class PushWorklogsCommand extends Command
         if ($updateToken or $client->getAuth()->isAccessTokenExpired()) {
             $client->getAuth()->refreshTokenWithAssertion();
             $token = $client->getAccessToken();
-            $config->set(self::GOOGLE_CLIENT_TOKEN_KEY, $token);
+            // store new token in app configuration
+            $config->set(SetupGoogleCommand::GOOGLE_TOKEN_KEY, $token);
             $config->save();
         }
 
@@ -98,10 +116,12 @@ class PushWorklogsCommand extends Command
         // @todo: need to come as a parameter or be piped with pull:workflogs command
         $csvPath = '/var/www/fogbugz-hours_2013-01-01_2013-01-31.csv';
         $csvFile = fopen($csvPath, 'r');
+        exit;
 
         // there is apparently no way to import File via PHP API, method appears incomplete...
         // $importResult = $service->table->importRows(self::TABLE_ID, array('isStrict'  => true));
         //
+        // ...so uploading via SQL then
         // ...so uploading via SQL then
         function runQueries(\Google_FusiontablesService $service, array $queries) {
             $sqlStr = implode(';', $queries);

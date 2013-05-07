@@ -1,5 +1,4 @@
 .idea/*
 vendor/*
-resources/google/oauth-privatekey.p12
 composer.lock
 composer.phar
