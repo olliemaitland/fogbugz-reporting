@@ -8,6 +8,7 @@
 namespace Fogbugz\Console\Command;
 
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\Input;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
@@ -18,12 +19,17 @@ class PushWorklogsCommand extends ByngCommand
     // name of the application in Google stats etc.
     const GOOGLE_APP_NAME = 'Byng FogBugz Reporting Tool';
 
+    const
+        CSV_PATH  = 'csv-path'  // path to CSV file to be uploaded
+    ;
+
     const TABLE_ID = '1lQiu9hX7Ki4UZf0uA1X3ZBTyvHsWfBRWQ0UPJAk';
 
     protected function configure()
     {
         $this
             ->setName('push:worklogs')
+            ->addArgument(self::CSV_PATH, InputArgument::REQUIRED, 'Path to CSV generated with pull:worklogs command to be uploaded')
         ;
     }
 
@@ -109,14 +115,34 @@ class PushWorklogsCommand extends ByngCommand
         return $service;
     }
 
+    /**
+     * @param InputInterface $input
+     *
+     * @return  array
+     * @throws  \Exception
+     */
+    protected function getArguments(InputInterface $input)
+    {
+        $args = parent::getArguments($input);
+
+        if (!file_exists($args[self::CSV_PATH])) {
+            // look in the default folder...
+            $args[self::CSV_PATH] = PullWorklogsCommand::DEFAULT_FOLDER . '/' . $args[self::CSV_PATH];
+            // ... and try again
+            if (!file_exists($args[self::CSV_PATH])) {
+                throw new \Exception('CSV file to be uploaded cannot be found');
+            }
+        }
+
+        return $args;
+    }
+
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $args = $this->getArguments($input);
         $service = $this->getFusionTablesService();
 
-        // @todo: need to come as a parameter or be piped with pull:workflogs command
-        $csvPath = '/var/www/fogbugz-hours_2013-01-01_2013-01-31.csv';
-        $csvFile = fopen($csvPath, 'r');
-        exit;
+        $csvFile = fopen($args[self::CSV_PATH], 'r');
 
         // there is apparently no way to import File via PHP API, method appears incomplete...
         // $importResult = $service->table->importRows(self::TABLE_ID, array('isStrict'  => true));
@@ -129,7 +155,7 @@ class PushWorklogsCommand extends ByngCommand
             sleep(1);   // API rate is nasty
 
             if (count($insertResult['rows']) !== count($queries)) {
-                throw \Exception('Failed to insert rows into Fusion Table');
+                throw new \Exception('Failed to insert rows into Fusion Table');
             }
 
             return count($queries);

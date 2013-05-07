@@ -37,17 +37,23 @@ class SetupGoogleCommand extends ByngCommand
             ->setName('setup:google')
             ->addArgument(self::GOOGLE_ACCOUNT_CLIENT_ID, InputArgument::REQUIRED, 'Google API service account client ID')
             ->addArgument(self::GOOGLE_ACCOUNT_NAME, InputArgument::REQUIRED, 'Google API service account account name')
-            ->addArgument(self::GOOGLE_ACCOUNT_KEY, InputArgument::REQUIRED, 'Google API service account account name')
+            ->addArgument(self::GOOGLE_ACCOUNT_KEY, InputArgument::REQUIRED, 'Google API service account private key path/filename')
             // is optional, but cannot be empty - if omitted, will be replaced with the default value
-            ->addArgument(self::GOOGLE_ACCOUNT_SECRET, InputArgument::OPTIONAL, 'Google API service account account name')
+            ->addArgument(self::GOOGLE_ACCOUNT_SECRET, InputArgument::OPTIONAL, 'Google API service account private key secret')
         ;
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    /**
+     * Returns inbound command line parameters checking their validity and using default values where needed
+     *
+     * @param InputInterface $input
+     *
+     * @return array
+     * @throws \Exception
+     */
+    protected function getArguments(InputInterface $input)
     {
-        // save all the arguments
-        $args = $input->getArguments();
-        unset($args['command']);
+        $args = parent::getArguments($input);
 
         if (strlen($args[self::GOOGLE_ACCOUNT_SECRET]) === 0) {
             // default secret for generate Google service account private keys
@@ -62,6 +68,14 @@ class SetupGoogleCommand extends ByngCommand
                 throw new \Exception('Private key cannot be found');
             }
         }
+
+        return $args;
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output)
+    {
+        // save all the arguments
+        $args = $this->getArguments($input);
 
         $configuration = $this->getConfig();
         $configuration->fromArray($args);

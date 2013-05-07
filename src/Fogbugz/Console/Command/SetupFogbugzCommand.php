@@ -17,26 +17,31 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 class SetupFogbugzCommand extends ByngCommand
 {
+    const
+        FOGBUGZ_URL         = 'fogbugz-url',
+        FOGBUGZ_EMAIL       = 'fogbugz-email',
+        FOGBUGZ_PASSWORD    = 'fogbugz-password',
+        FOGBUGZ_TOKEN       = 'fogbugz-token'
+    ;
+
     protected function configure()
     {
         $this
             ->setName('setup:fogbugz')
-            ->addArgument('client-id', InputArgument::REQUIRED, 'Fogbugz API end point URL')
-            ->addArgument('fogbugz-email', InputArgument::REQUIRED, 'Fogbugz API email')
-            ->addArgument('fogbugz-password', InputArgument::REQUIRED, 'Fogbugz API password');
+            ->addArgument(self::FOGBUGZ_URL, InputArgument::REQUIRED, 'Fogbugz API end point URL')
+            ->addArgument(self::FOGBUGZ_EMAIL, InputArgument::REQUIRED, 'Fogbugz API email')
+            ->addArgument(self::FOGBUGZ_PASSWORD, InputArgument::REQUIRED, 'Fogbugz API password');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        // save all the arguments
-        $args = $input->getArguments();
-        unset($args['command']);
-
+        $args = $this->getArguments($input);
         $configuration = $this->getConfig();
-        /* @var \Fogbugz\Entities\Configuration $configuration */
+
+        // save all the arguments
         $configuration->fromArray($args);
         $configuration->save();
 
-        $output->writeln('<info>Configuration saved</info>');
+        $output->writeln('<info>FogBugz credentials configuration saved</info>');
     }
 }

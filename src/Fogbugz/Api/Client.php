@@ -9,25 +9,31 @@
 
 namespace Fogbugz\Api;
 
+use Fogbugz\Console\Command\SetupFogbugzCommand;
 use Guzzle\Http\Client as BaseClient;
 
 class Client extends BaseClient
 {
+    /**
+     * @var \Fogbugz\Entities\Configuration|null
+     */
+    protected $config = null;
+
     public function __construct(\Fogbugz\Entities\Configuration $config)
     {
         $this->config = $config;
-        $baseUrl = $this->config->get("fogbugz-url");
+        $baseUrl = $this->config->get(SetupFogbugzCommand::FOGBUGZ_URL);
 
 
         $params = array ();
         parent::__construct($baseUrl, $params);
 
         try {
-            $token = $this->config->get("fogbugz-token");
+            $token = $this->config->get(SetupFogbugzCommand::FOGBUGZ_TOKEN);
 
         } catch (\Exception $e) {
             $token = $this->generateToken();
-            $this->config->set("fogbugz-token", $token);
+            $this->config->set(SetupFogbugzCommand::FOGBUGZ_TOKEN, $token);
         }
 
         $this->token = $token;
@@ -60,8 +66,8 @@ class Client extends BaseClient
     protected function generateToken()
     {
         $options = array (
-            "email" => $this->config->get("fogbugz-email"),
-            "password" => $this->config->get("fogbugz-password")
+            "email"     => $this->config->get(SetupFogbugzCommand::FOGBUGZ_EMAIL),
+            "password"  => $this->config->get(SetupFogbugzCommand::FOGBUGZ_PASSWORD)
         );
 
         $xml = $this->runCommand("logon", $options);

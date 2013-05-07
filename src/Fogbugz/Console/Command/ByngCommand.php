@@ -8,6 +8,7 @@
 namespace Fogbugz\Console\Command;
 
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputInterface;
 
 class ByngCommand extends Command
 {
@@ -17,7 +18,7 @@ class ByngCommand extends Command
      * @return  \Fogbugz\Entities\Configuration
      * @throws  \Exception
      */
-    public function getConfig()
+    protected function getConfig()
     {
         // accessing stored configuration
         $app = $this->getApplication()->getSilexApplication();
@@ -31,11 +32,28 @@ class ByngCommand extends Command
     }
 
     /**
+     * Returns absolute path to application deployment folder
+     *
      * @return string
      */
-    public static function getAppFolder()
+    protected static function getAppFolder()
     {
         $appFolder = dirname(dirname(dirname(dirname(dirname(__FILE__)))));
         return $appFolder;
+    }
+
+    /**
+     * Returns somewhat cleansed command line arguments
+     *
+     * @param   InputInterface  $input
+     *
+     * @return  array
+     */
+    protected function getArguments(InputInterface $input)
+    {
+        $args = $input->getArguments();
+        unset($args['command']);
+
+        return $args;
     }
 }
