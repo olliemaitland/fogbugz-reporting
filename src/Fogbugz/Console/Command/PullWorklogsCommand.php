@@ -79,7 +79,7 @@ class PullWorklogsCommand extends ByngCommand
         $args = $this->getArguments($input);
 
         $config = $this->getConfig();
-        $client = new \Fogbugz\Api\Client($config);
+        $client = new \Fogbugz\Api\FogbugzClient($config);
 
         // get worklogs
         $start  = \DateTime::createFromFormat(self::DEFAULT_DATE_FORMAT, $args[self::DATE_START]);

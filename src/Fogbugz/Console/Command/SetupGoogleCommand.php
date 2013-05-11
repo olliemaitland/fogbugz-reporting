@@ -23,7 +23,7 @@ class SetupGoogleCommand extends ByngCommand
         GOOGLE_ACCOUNT_KEY              = 'private-key',        // service account private key filename
         GOOGLE_ACCOUNT_SECRET           = 'key-secret',         // private key secret
         // parameters set later by app itself
-        GOOGLE_TOKEN_KEY                = 'google-oauth-token'  // local settings key for storing an authentication token
+        GOOGLE_TOKEN                    = 'google-oauth-token'  // local settings key for storing an authentication token
     ;
 
     // default path for Google private key(s)

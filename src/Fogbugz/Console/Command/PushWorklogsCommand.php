@@ -14,22 +14,14 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
+use Fogbugz\Api;
+
 class PushWorklogsCommand extends ByngCommand
 {
-    // name of the application in Google stats etc.
-    const GOOGLE_APP_NAME = 'Byng FogBugz Reporting Tool';
-
+    // command parameters
     const
         CSV_PATH    = 'csv-path',   // path to CSV file to be uploaded
         TABLE_ID    = 'table-id'    // Google Fusion Table ID
-    ;
-
-    // table columns
-    const
-        TABLE_COL_PROJECT   = 'Project',
-        TABLE_COL_DAY       = 'Day',
-        TABLE_COL_HOURS     = 'Hours',
-        TABLE_COL_PERSON    = 'Person'
     ;
 
     protected function configure()
@@ -47,7 +39,7 @@ class PushWorklogsCommand extends ByngCommand
      * @return  array
      * @throws  \Exception
      */
-    public function getGoogleOauthCredentials()
+    public function getCredentials()
     {
         $settings = array(
             SetupGoogleCommand::GOOGLE_ACCOUNT_CLIENT_ID,
@@ -68,6 +60,21 @@ class PushWorklogsCommand extends ByngCommand
             }
         }
 
+        // reading private key content
+        $privateKey = file_get_contents($oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_KEY]);
+        if ($privateKey === false) {
+            throw new \Exception('Private key cannot be found');
+        }
+        $settings[SetupGoogleCommand::GOOGLE_ACCOUNT_KEY] = $privateKey;
+
+        // retrieving token - unlike other parameters about, it's okay to not have it stored
+        try {
+            $token = $config->get(SetupGoogleCommand::GOOGLE_TOKEN);
+        } catch (\Exception $e) {
+            $token = null;
+        }
+        $oauth[SetupGoogleCommand::GOOGLE_TOKEN] = $token;
+
         return $oauth;
     }
 
@@ -75,52 +82,30 @@ class PushWorklogsCommand extends ByngCommand
      * Authenticates with a previously saved token or first-time authentication information
      * Returns ready to use Fusion Table API client
      *
-     * @return \Google_FusiontablesService
+     * @return  Api\GoogleClient
+     * @throws  \Exception
      */
-    protected function getFusionTablesService()
+    protected function getGoogleClient()
     {
-        // require_once $appFolder . '/vendor/google-api-php-client/src/Google_Client.php';
-        // require_once $appFolder . '/vendor/google-api-php-client/src/contrib/Google_FusiontablesService.php';
+        $oauth = $this->getCredentials();
 
-        $oauth = $this->getGoogleOauthCredentials();
-
-        $client = new \Google_Client();
-        $client->setClientId($oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_CLIENT_ID]);
-        $client->setApplicationName(self::GOOGLE_APP_NAME);
-
-        $client->setAssertionCredentials(new \Google_AssertionCredentials(
+        $client = new Api\GoogleClient(
+            $oauth[SetupGoogleCommand::GOOGLE_TOKEN],
+            $oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_CLIENT_ID],
             $oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_NAME],
-            array('https://www.googleapis.com/auth/fusiontables'),
-            file_get_contents($oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_KEY]),
+            $oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_KEY],
             $oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_SECRET]
-        ));
+        );
 
-        // accessing stored configuration
-        $config = $this->getConfig();
-
-        $updateToken = false;
-        try {
-            // attempting to retrieve an existing token
-            $token = $config->get(SetupGoogleCommand::GOOGLE_TOKEN_KEY);
-            $client->setAccessToken($token);
-
-        } catch (\Exception $e) {
-            // failed to read token
-            $updateToken = true;
-        }
-
-        // refresh OAuth token if no token, invalid or expired one
-        if ($updateToken or $client->getAuth()->isAccessTokenExpired()) {
-            $client->getAuth()->refreshTokenWithAssertion();
-            $token = $client->getAccessToken();
+        $newToken = $client->getOauthToken();
+        if ($newToken !== $oauth[SetupGoogleCommand::GOOGLE_TOKEN]) {
             // store new token in app configuration
-            $config->set(SetupGoogleCommand::GOOGLE_TOKEN_KEY, $token);
+            $config = $this->getConfig();
+            $config->set(SetupGoogleCommand::GOOGLE_TOKEN, $newToken);
             $config->save();
         }
 
-        // connect to Fusion Tables service
-        $service = new \Google_FusiontablesService($client);
-        return $service;
+        return $client;
     }
 
     /**
@@ -151,72 +136,13 @@ class PushWorklogsCommand extends ByngCommand
         return $args;
     }
 
-    /**
-     * Returns INSERT statement to add the CSV row given into the specified Fusion table
-     *
-     * @param   string  $tableId
-     * @param   array   $csvRow
-     *
-     * @return  string
-     */
-    protected function getInsertStatement($tableId, $csvRow) {
-        // escape values inserted
-        // table ID is not escape as it is supposed to be obtained in a safe way
-        foreach ($csvRow as $key => $value) {
-            $csvRow[$key] = addslashes($value);
-        }
-
-        $sql =
-            'INSERT INTO ' . $tableId . ' (' . implode(',', array(
-                self::TABLE_COL_PROJECT,
-                self::TABLE_COL_DAY,
-                self::TABLE_COL_HOURS,
-                self::TABLE_COL_PERSON
-            )) .
-            ") VALUES ('" . implode("','", $csvRow) . "')"
-        ;
-
-        return $sql;
-    }
-
-
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $args = $this->getArguments($input);
-        $service = $this->getFusionTablesService();
-
         $csvFile = fopen($args[self::CSV_PATH], 'r');
 
-        // there is apparently no way to import File via PHP API, method appears incomplete...
-        // $importResult = $service->table->importRows(self::TABLE_ID, array('isStrict'  => true));
-        //
-        // ...so uploading via SQL then
-        function runQueries(\Google_FusiontablesService $service, array $queries) {
-            $sqlStr = implode(';', $queries);
-            $insertResult = $service->query->sql($sqlStr);
-            sleep(1);   // API rate is nasty
-
-            if (count($insertResult['rows']) !== count($queries)) {
-                throw new \Exception('Failed to insert rows into Fusion Table');
-            }
-
-            return count($queries);
-        };
-
-        $rowCount = 0;
-        $sql = array();
-        while (($record = fgetcsv($csvFile)) !== false) {
-            $sql[] = $this->getInsertStatement($args[self::TABLE_ID], $record);
-
-            if (count($sql) >= 5) {
-                $rowCount += runQueries($service, $sql);
-                $sql = array();
-            }
-        };
-
-        if (!empty($sql)) {
-            $rowCount += runQueries($service, $sql);
-        }
+        $client = $this->getGoogleClient();
+        $rowCount = $client->csvToTable($csvFile, $args[self::TABLE_ID]);
 
         $output->writeln(sprintf('<info>%s records pushed to Fusion Tables</info>', $rowCount));
     }

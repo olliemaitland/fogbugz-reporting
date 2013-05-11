@@ -32,7 +32,7 @@ class FogbugzClientTest extends PHPUnit_Framework_TestCase
 
         $config = \Fogbugz\Entities\Configuration($app);
 
-        $client = new \Fogbugz\Api\Client($config);
+        $client = new \Fogbugz\Api\FogbugzClient($config);
 
         $client->getWorklogs();
     }
