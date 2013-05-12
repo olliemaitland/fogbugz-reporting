@@ -65,7 +65,7 @@ class PushWorklogsCommand extends ByngCommand
         if ($privateKey === false) {
             throw new \Exception('Private key cannot be found');
         }
-        $settings[SetupGoogleCommand::GOOGLE_ACCOUNT_KEY] = $privateKey;
+        $oauth[SetupGoogleCommand::GOOGLE_ACCOUNT_KEY] = $privateKey;
 
         // retrieving token - unlike other parameters about, it's okay to not have it stored
         try {
@@ -139,10 +139,9 @@ class PushWorklogsCommand extends ByngCommand
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $args = $this->getArguments($input);
-        $csvFile = fopen($args[self::CSV_PATH], 'r');
 
         $client = $this->getGoogleClient();
-        $rowCount = $client->csvToTable($csvFile, $args[self::TABLE_ID]);
+        $rowCount = $client->csvToTable($args[self::CSV_PATH], $args[self::TABLE_ID]);
 
         $output->writeln(sprintf('<info>%s records pushed to Fusion Tables</info>', $rowCount));
     }

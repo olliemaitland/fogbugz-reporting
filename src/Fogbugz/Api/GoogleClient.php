@@ -21,6 +21,18 @@ class GoogleClient
         TABLE_COL_PERSON    = 'Person'
     ;
 
+    protected static $columns = array(
+        self::TABLE_COL_PROJECT,
+        self::TABLE_COL_DAY,
+        self::TABLE_COL_HOURS,
+        self::TABLE_COL_PERSON
+    );
+
+    /**
+     * @var null|\Google_Client
+     */
+    protected $client = null;
+
     /**
      * Fusion Tables API client
      *
@@ -35,6 +47,17 @@ class GoogleClient
      */
     protected $oauthToken = null;
 
+    /**
+     * @return \Google_Client|null
+     */
+    public function getClient()
+    {
+        return $this->client;
+    }
+
+    /**
+     * @return \Google_FusiontablesService|null
+     */
     public function getFusionTables()
     {
         return $this->fusionTables;
@@ -84,7 +107,7 @@ class GoogleClient
         // remember new token so caller can update its storage
         $this->oauthToken = $token;
 
-        // connect to Fusion Tables service
+        $this->client = $client;
         $this->fusionTables = new \Google_FusiontablesService($client);
     }
 
@@ -94,6 +117,7 @@ class GoogleClient
      * @param   array   $queries
      *
      * @return  int
+     * @throws  \Exception
      */
     protected function runInsertQueries(array $queries)
     {
@@ -107,7 +131,6 @@ class GoogleClient
         }
 
         return count($queries);
-
     }
 
     /**
@@ -117,22 +140,28 @@ class GoogleClient
      * @param   array   $csvRow
      *
      * @return  string
+     * @throws  \Exception
      */
-    protected function getInsertStatement($tableId, array $csvRow) {
-        // escape values inserted
+    protected function getInsertStatement($tableId, array $csvRow)
+    {
+        if (count($csvRow) !== count(self::$columns)) {
+            throw new \Exception('Wrong number of fields in the record');
+        }
+
+        // @todo: $tableId should be sanitised as well
+
+        // escape values to be inserted
         // table ID is not escape as it is supposed to be obtained in a safe way
         foreach ($csvRow as $key => $value) {
             $csvRow[$key] = addslashes($value);
         }
 
         $sql =
-            'INSERT INTO ' . $tableId . ' (' . implode(',', array(
-                self::TABLE_COL_PROJECT,
-                self::TABLE_COL_DAY,
-                self::TABLE_COL_HOURS,
-                self::TABLE_COL_PERSON
-            )) .
-                ") VALUES ('" . implode("','", $csvRow) . "')"
+            'INSERT INTO ' . $tableId . ' (' .
+            implode(',', self::$columns) .
+            ") VALUES ('" .
+            implode("','", $csvRow) .
+            "')"
         ;
 
         return $sql;
@@ -141,34 +170,28 @@ class GoogleClient
     /**
      * Inserts data from the specified CSV into a Fusion table
      *
-     * @param   resource    $csvFile
+     * @param   string      $csvPath
      * @param   string      $tableId
      *
      * @return  int
+     * @throws  \Exception
      */
-    public function csvToTable($csvFile, $tableId)
+    public function csvToTable($csvPath, $tableId)
     {
-        // there is apparently no way to import File via PHP API, method appears incomplete...
-        // $importResult = $service->table->importRows(self::TABLE_ID, array('isStrict'  => true));
-        //
-        // ...so uploading via SQL then
+        // using custom implementation of importRows method as it doesn't work properly in vendor Google API package
 
-        $rowCount = 0;
-        $sql = array();
-        $queriesAtOnce = 5;
-
-        while (($record = fgetcsv($csvFile)) !== false) {
-            $sql[] = $this->getInsertStatement($tableId, $record);
-
-            if (count($sql) >= $queriesAtOnce) {
-                $rowCount += $this->runInsertQueries($sql);
-                $sql = array();
-            }
-        };
-
-        if (!empty($sql)) {
-            $rowCount += $this->runInsertQueries($sql);
+        // @todo: possible memory limit error here large files
+        // @todo: also importRows supports up to 100Mb files only, so paginating here would be nice
+        $csvContent = file_get_contents($csvPath);
+        if ($csvContent === false) {
+            throw new \Exception('Failed to open CSV file to import');
         }
+
+        $uploadService = new GoogleFusiontablesUploadService($this->client);
+        $uploadServiceResource = $uploadService->import;
+        $response = $uploadServiceResource->import($tableId, $csvContent);
+
+        $rowCount = $response['numRowsReceived'];
 
         return $rowCount;
     }
