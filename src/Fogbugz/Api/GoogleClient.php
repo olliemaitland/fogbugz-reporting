@@ -195,11 +195,11 @@ class GoogleClient
     }
 
     /**
-     * Returns the size of memory block it is safe to allocate
+     * Returns true if we're close enough to allowed memory limit (80% of it used)
      *
      * @return  int
      */
-    protected static function getRemainingMemorySize()
+    protected static function isCloseToMemoryLimit()
     {
         // requesting php.ini value
         $memoryLimit = ini_get('memory_limit');
@@ -217,12 +217,13 @@ class GoogleClient
         }
 
         // decreasing it by already allocated size
-        $memoryLimit -= memory_get_usage(true);
+        $memoryOccupied = memory_get_usage(true);
 
-        // safety coefficient as we don't really want to occupy every remaining byte
-        $memoryLimit = (int) floor($memoryLimit * 0.8);
+        if (($memoryOccupied / $memoryLimit) >= 0.8) {
+            return true;
+        }
 
-        return $memoryLimit;
+        return false;
     }
 
     /**
@@ -260,10 +261,10 @@ class GoogleClient
         $rowCount = 0;
         // reading CSV line by line
         while (($csvRow = fgets($csvHandle)) !== false) {
-            // this calculation on every iteration might be expensive
-            $limit = min(GoogleTableUploadServiceResource::MAX_IMPORT_SIZE, self::getRemainingMemorySize());
-
-            if (strlen($csvRow) + strlen($csvContent) >= $limit) {  // that should handle Unicode strings as well, shouldn't it?
+            if (
+                ((strlen($csvContent) + strlen($csvRow)) >= GoogleTableUploadServiceResource::MAX_IMPORT_SIZE) or
+                self::isCloseToMemoryLimit()
+            ) {
                 // if we add current line on top, it'll be too much, so let's send what we have accumulated
                 $response = $uploadServiceResource->import($tableId, $csvContent, $importParams);
                 $rowCount += $response[GoogleTableImportResult::RESULT_NUMROWS];

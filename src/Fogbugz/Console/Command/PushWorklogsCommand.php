@@ -152,8 +152,7 @@ class PushWorklogsCommand extends ByngCommand
         $csvHandle = fopen($args[self::CSV_PATH], 'r'); // not checking result here as getArguments() is safe
 
         $client = $this->getGoogleClient();
-        //$rowCount = $client->csvToTable($csvHandle, $args[self::TABLE_ID]);
-        // $output->writeln(sprintf('<info>%s records pushed to Fusion Tables</info>', $rowCount));
-        print_r($client->createTable($args[self::TABLE_ID]));
+        $rowCount = $client->csvToTable($csvHandle, $args[self::TABLE_ID]);
+        $output->writeln(sprintf('<info>%s records pushed to Fusion Tables</info>', $rowCount));
     }
 }
