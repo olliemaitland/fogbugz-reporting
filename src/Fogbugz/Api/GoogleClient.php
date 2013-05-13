@@ -8,23 +8,25 @@
 
 namespace Fogbugz\Api;
 
+use Fogbugz\Console\Command\PushWorklogsCommand;
+
 class GoogleClient
 {
     // name of the application in Google stats etc.
     const GOOGLE_APP_NAME = 'Byng FogBugz Reporting Tool';
 
-    // keys for column properties
+    // Google API constants for KIND properties of created objects
     const
-        COL_KIND = 'kind',
-        COL_TYPE = 'type'
+        KIND_TABLE  = 'fusiontables#table',
+        KIND_COLUMN = 'fusiontables#column'
     ;
 
     // supported column tables
     // strangely no constants in vendor API
     const
-        COL_TYPE_TEXT   = 'Text',
-        COL_TYPE_NUMBER = 'Number',
-        COL_TYPE_DATE   = 'Date/Time'
+        COL_TYPE_TEXT   = 'TEXT',
+        COL_TYPE_NUMBER = 'NUMBER',
+        COL_TYPE_DATE   = 'DATETIME'
     ;
 
     // default table columns
@@ -37,10 +39,10 @@ class GoogleClient
 
     // default table structure
     protected static $columns = array(
-        self::TABLE_COL_PROJECT => array(self::COL_TYPE => self::COL_TYPE_TEXT),
-        self::TABLE_COL_DAY     => array(self::COL_TYPE => self::COL_TYPE_DATE),
-        self::TABLE_COL_HOURS   => array(self::COL_TYPE => self::COL_TYPE_NUMBER),
-        self::TABLE_COL_PERSON  => array(self::COL_TYPE => self::COL_TYPE_TEXT)
+        self::TABLE_COL_PROJECT => self::COL_TYPE_TEXT,
+        // self::TABLE_COL_DAY     => self::COL_TYPE_DATE,
+        // self::TABLE_COL_HOURS   => self::COL_TYPE_NUMBER,
+        // self::TABLE_COL_PERSON  => self::COL_TYPE_TEXT
     );
 
     /**
@@ -125,13 +127,13 @@ class GoogleClient
             throw new \Exception('Wrong number of fields in the record');
         }
 
-        // @todo: $tableId should be sanitised as well
-
         // escape values to be inserted
         // table ID is not escape as it is supposed to be obtained in a safe way
         foreach ($csvRow as $key => $value) {
             $csvRow[$key] = addslashes($value);
         }
+
+        // @todo: tableId is not sanitised because it doesn't come from file input, but maybe it should be?
 
         $sql =
             'INSERT INTO ' . $tableId . ' (' .
@@ -153,16 +155,13 @@ class GoogleClient
     {
         $columns = array();
 
-        foreach (self::$columns as $colName => $colProp) {
+        foreach (self::$columns as $colName => $type) {
             $column = new \Google_Column();
             $column->setName($colName);
+            $column->setType($type);
+            // $column->setKind(self::KIND_COLUMN);
 
-            $column->setType($colProp[self::COL_TYPE]);
-            if ($colProp[self::COL_KIND]) {
-                $column->setKind(self::COL_KIND);
-            }
-
-            $columns[] = $columns;
+            $columns[] = $column;
         }
 
         return $columns;
@@ -170,16 +169,29 @@ class GoogleClient
 
     /**
      * Creates a new Fusion Table to import data in and returns its ID
+     *
+     * @param   string  $name
+     *
+     * @return  array
      */
-    public function createTable()
+    public function createTable($name)
     {
         $columns = self::getDefaultColumns();
-        print_r($columns);
+
         $table = new \Google_Table();
+        $table->setName($name);
         $table->setColumns($columns);
+        // $table->setKind(self::KIND_TABLE);
+        $table->setDescription('Created by ' . self::GOOGLE_APP_NAME .' on ' . date('Y-m-d H:i:s'));
+        $table->setIsExportable(true);
 
         $fusionTables = new \Google_FusiontablesService($this->client);
-        $insertResult = $fusionTables->table->insert($table);
+
+        $result = $fusionTables->table->insert($table);
+
+        // $table = $fusionTables->table->get($name);
+
+        return $result;
     }
 
     /**
@@ -254,7 +266,7 @@ class GoogleClient
             if (strlen($csvRow) + strlen($csvContent) >= $limit) {  // that should handle Unicode strings as well, shouldn't it?
                 // if we add current line on top, it'll be too much, so let's send what we have accumulated
                 $response = $uploadServiceResource->import($tableId, $csvContent, $importParams);
-                $rowCount += $response['numRowsReceived'];
+                $rowCount += $response[GoogleTableImportResult::RESULT_NUMROWS];
 
                 unset($csvContent); // couldn't harm (http://php.net/manual/en/features.gc.php)
                 $csvContent = '';
@@ -267,7 +279,11 @@ class GoogleClient
         if (strlen($csvContent)) {
             // upload the last remaining chunk
             $response = $uploadServiceResource->import($tableId, $csvContent, $importParams);
-            $rowCount += $response['numRowsReceived'];
+            $rowCount += $response[GoogleTableImportResult::RESULT_NUMROWS];
+        }
+
+        if (!$hasHeaders and ($rowCount > 0)) {
+            $rowCount--;
         }
 
         return $rowCount;

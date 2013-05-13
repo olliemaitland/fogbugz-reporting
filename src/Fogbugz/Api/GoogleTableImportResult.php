@@ -15,8 +15,19 @@
 
 namespace Fogbugz\Api;
 
-class GoogleTableImportResult extends \Google_Model {
+class GoogleTableImportResult extends \Google_Model
+{
+    // when 'useObjects' is off in global API settings and simple arrays are returned
+    // these constants can be used to access their keys
+    const
+        RESULT_NUMROWS = 'numRowsReceived'
+    ;
+
     protected $kind;
+
+    /**
+     * @var int
+     */
     protected $numRowsReceived;
 
     public function getKind() {

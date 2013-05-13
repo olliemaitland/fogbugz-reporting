@@ -39,7 +39,7 @@ class GoogleTableUploadServiceResource extends \Google_ServiceResource
         }
     }
 
-    // we need to redeclare a bund of fields used in __call method we need to override because
+    // we need to redeclare a bunch of fields used in __call method we need to override because
     // they're private in the parent vendor class
     // hence a lot of code duplication - sorry, poor parent API architecture :(
 

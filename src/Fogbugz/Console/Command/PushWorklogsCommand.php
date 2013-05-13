@@ -18,11 +18,21 @@ use Fogbugz\Api;
 
 class PushWorklogsCommand extends ByngCommand
 {
+    // path to to default certificate from http://curl.haxx.se/docs/caextract.html to run HTTPS requests without warnings
+    const CURL_CERT_PATH = 'resources/cacert.pem';
+
     // command parameters
     const
         CSV_PATH    = 'csv-path',   // path to CSV file to be uploaded
         TABLE_ID    = 'table-id'    // Google Fusion Table ID
     ;
+
+    /**
+     * Holds path to CURL certification originally defined in php.ini to restore it back if needed
+     *
+     * @var null|string
+     */
+    protected static $oldCertPath = null;
 
     protected function configure()
     {
@@ -139,12 +149,11 @@ class PushWorklogsCommand extends ByngCommand
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $args = $this->getArguments($input);
-
         $csvHandle = fopen($args[self::CSV_PATH], 'r'); // not checking result here as getArguments() is safe
 
         $client = $this->getGoogleClient();
-        $rowCount = $client->csvToTable($csvHandle, $args[self::TABLE_ID]);
-
-        $output->writeln(sprintf('<info>%s records pushed to Fusion Tables</info>', $rowCount));
+        //$rowCount = $client->csvToTable($csvHandle, $args[self::TABLE_ID]);
+        // $output->writeln(sprintf('<info>%s records pushed to Fusion Tables</info>', $rowCount));
+        print_r($client->createTable($args[self::TABLE_ID]));
     }
 }
