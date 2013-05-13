@@ -17,6 +17,8 @@ namespace Fogbugz\Api;
 
 class GoogleTableUploadServiceResource extends \Google_ServiceResource
 {
+    const MAX_IMPORT_SIZE = 104857600; // 100 Mb API limitation
+
     /**
      * Import data into a table. (table.import)
      *
@@ -135,13 +137,13 @@ class GoogleTableUploadServiceResource extends \Google_ServiceResource
         $method['parameters'] = array_merge($method['parameters'], $this->stackParameters);
         foreach ($parameters as $key => $val) {
             if ($key != 'postBody' && ! isset($method['parameters'][$key])) {
-                throw new Google_Exception("($name) unknown parameter: '$key'");
+                throw new \Google_Exception("($name) unknown parameter: '$key'");
             }
         }
         if (isset($method['parameters'])) {
             foreach ($method['parameters'] as $paramName => $paramSpec) {
                 if (isset($paramSpec['required']) && $paramSpec['required'] && ! isset($parameters[$paramName])) {
-                    throw new Google_Exception("($name) missing required param: '$paramName'");
+                    throw new \Google_Exception("($name) missing required param: '$paramName'");
                 }
                 if (isset($parameters[$paramName])) {
                     $value = $parameters[$paramName];
@@ -175,7 +177,7 @@ class GoogleTableUploadServiceResource extends \Google_ServiceResource
         //////////////////////////////////////
 
         if (isset($method['mediaUpload'])) {
-            $media = Google_MediaFileUpload::process($postBody, $parameters);
+            $media = \Google_MediaFileUpload::process($postBody, $parameters);
             if ($media) {
                 $contentType = isset($media['content-type']) ? $media['content-type']: null;
                 $postBody = isset($media['postBody']) ? $media['postBody'] : null;
@@ -192,7 +194,7 @@ class GoogleTableUploadServiceResource extends \Google_ServiceResource
                 $contentTypeHeader['content-type'] = $contentType;
             } else {
                 $contentTypeHeader['content-type'] = 'application/json; charset=UTF-8';
-                $contentTypeHeader['content-length'] = Google_Utils::getStrLen($postBody);
+                $contentTypeHeader['content-length'] = \Google_Utils::getStrLen($postBody);
             }
             $httpRequest->setRequestHeaders($contentTypeHeader);
         }

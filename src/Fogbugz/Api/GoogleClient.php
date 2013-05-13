@@ -13,7 +13,21 @@ class GoogleClient
     // name of the application in Google stats etc.
     const GOOGLE_APP_NAME = 'Byng FogBugz Reporting Tool';
 
-    // table columns
+    // keys for column properties
+    const
+        COL_KIND = 'kind',
+        COL_TYPE = 'type'
+    ;
+
+    // supported column tables
+    // strangely no constants in vendor API
+    const
+        COL_TYPE_TEXT   = 'Text',
+        COL_TYPE_NUMBER = 'Number',
+        COL_TYPE_DATE   = 'Date/Time'
+    ;
+
+    // default table columns
     const
         TABLE_COL_PROJECT   = 'Project',
         TABLE_COL_DAY       = 'Day',
@@ -21,24 +35,18 @@ class GoogleClient
         TABLE_COL_PERSON    = 'Person'
     ;
 
+    // default table structure
     protected static $columns = array(
-        self::TABLE_COL_PROJECT,
-        self::TABLE_COL_DAY,
-        self::TABLE_COL_HOURS,
-        self::TABLE_COL_PERSON
+        self::TABLE_COL_PROJECT => array(self::COL_TYPE => self::COL_TYPE_TEXT),
+        self::TABLE_COL_DAY     => array(self::COL_TYPE => self::COL_TYPE_DATE),
+        self::TABLE_COL_HOURS   => array(self::COL_TYPE => self::COL_TYPE_NUMBER),
+        self::TABLE_COL_PERSON  => array(self::COL_TYPE => self::COL_TYPE_TEXT)
     );
 
     /**
      * @var null|\Google_Client
      */
     protected $client = null;
-
-    /**
-     * Fusion Tables API client
-     *
-     * @var \Google_FusiontablesService|null
-     */
-    protected $fusionTables = null;
 
     /**
      * Actual OAuth token used to authenticate with Google API
@@ -53,14 +61,6 @@ class GoogleClient
     public function getClient()
     {
         return $this->client;
-    }
-
-    /**
-     * @return \Google_FusiontablesService|null
-     */
-    public function getFusionTables()
-    {
-        return $this->fusionTables;
     }
 
     /**
@@ -108,29 +108,6 @@ class GoogleClient
         $this->oauthToken = $token;
 
         $this->client = $client;
-        $this->fusionTables = new \Google_FusiontablesService($client);
-    }
-
-    /**
-     * Executes a given array of insert queries
-     *
-     * @param   array   $queries
-     *
-     * @return  int
-     * @throws  \Exception
-     */
-    protected function runInsertQueries(array $queries)
-    {
-        $sqlStr = implode(';', $queries);
-        $insertResult = $this->getFusionTables()->query->sql($sqlStr);
-
-        sleep(1);   // API rate is nasty
-
-        if (count($insertResult['rows']) !== count($queries)) {
-            throw new \Exception('Failed to insert rows into Fusion Table');
-        }
-
-        return count($queries);
     }
 
     /**
@@ -168,30 +145,130 @@ class GoogleClient
     }
 
     /**
-     * Inserts data from the specified CSV into a Fusion table
+     * Returns a set of default columns (e.g. to create a new)
      *
-     * @param   string      $csvPath
+     * @return  \Google_Column[]
+     */
+    protected static function getDefaultColumns()
+    {
+        $columns = array();
+
+        foreach (self::$columns as $colName => $colProp) {
+            $column = new \Google_Column();
+            $column->setName($colName);
+
+            $column->setType($colProp[self::COL_TYPE]);
+            if ($colProp[self::COL_KIND]) {
+                $column->setKind(self::COL_KIND);
+            }
+
+            $columns[] = $columns;
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Creates a new Fusion Table to import data in and returns its ID
+     */
+    public function createTable()
+    {
+        $columns = self::getDefaultColumns();
+        print_r($columns);
+        $table = new \Google_Table();
+        $table->setColumns($columns);
+
+        $fusionTables = new \Google_FusiontablesService($this->client);
+        $insertResult = $fusionTables->table->insert($table);
+    }
+
+    /**
+     * Returns the size of memory block it is safe to allocate
+     *
+     * @return  int
+     */
+    protected static function getRemainingMemorySize()
+    {
+        // requesting php.ini value
+        $memoryLimit = ini_get('memory_limit');
+
+        // extracting it into bytes
+        $memoryLimit = trim($memoryLimit);
+        $units =  strtolower($memoryLimit[strlen($memoryLimit) - 1]);
+        switch ($units) {
+            case 'g':
+                $memoryLimit *= 1024;
+            case 'm':
+                $memoryLimit *= 1024;
+            case 'k':
+                $memoryLimit *= 1024;
+        }
+
+        // decreasing it by already allocated size
+        $memoryLimit -= memory_get_usage(true);
+
+        // safety coefficient as we don't really want to occupy every remaining byte
+        $memoryLimit = (int) floor($memoryLimit * 0.8);
+
+        return $memoryLimit;
+    }
+
+    /**
+     * Inserts data from the specified CSV into a Fusion table
+     * Uses custom implementation of importRows method as it doesn't work properly in vendor Google API package
+     *
+     * @param   resource    $csvHandle
      * @param   string      $tableId
+     * @param   bool        $hasHeaders
      *
      * @return  int
      * @throws  \Exception
      */
-    public function csvToTable($csvPath, $tableId)
+    public function csvToTable($csvHandle, $tableId, $hasHeaders = false)
     {
-        // using custom implementation of importRows method as it doesn't work properly in vendor Google API package
-
-        // @todo: possible memory limit error here large files
-        // @todo: also importRows supports up to 100Mb files only, so paginating here would be nice
-        $csvContent = file_get_contents($csvPath);
-        if ($csvContent === false) {
-            throw new \Exception('Failed to open CSV file to import');
-        }
-
+        // accessing the import service we will be callin the the process
         $uploadService = new GoogleFusiontablesUploadService($this->client);
         $uploadServiceResource = $uploadService->import;
-        $response = $uploadServiceResource->import($tableId, $csvContent);
+        // default upload parameters for that service
+        $importParams = array(
+            GoogleFusionTablesUploadService::PARAM_ENCODING => GoogleFusionTablesUploadService::PARAM_ENCODING_AUTODETECT
+        );
 
-        $rowCount = $response['numRowsReceived'];
+        // rewinding to the beginning of the imported CSV
+        fseek($csvHandle, 0);
+
+        $csvContent = '';
+        if (!$hasHeaders) {
+            // first line would be discarded by Fusion Tables so we need to start with a non-meaningful line
+            // can't be just an empty line (even isStrict=false) seem still require the right number of headers
+            $csvContent .= implode(',', array_keys(self::$columns)) . PHP_EOL;
+        }
+
+        // processing the CSV in maybe an unnecessarily sophisticated way, but that should allow to handling long CSVs
+        $rowCount = 0;
+        // reading CSV line by line
+        while (($csvRow = fgets($csvHandle)) !== false) {
+            // this calculation on every iteration might be expensive
+            $limit = min(GoogleTableUploadServiceResource::MAX_IMPORT_SIZE, self::getRemainingMemorySize());
+
+            if (strlen($csvRow) + strlen($csvContent) >= $limit) {  // that should handle Unicode strings as well, shouldn't it?
+                // if we add current line on top, it'll be too much, so let's send what we have accumulated
+                $response = $uploadServiceResource->import($tableId, $csvContent, $importParams);
+                $rowCount += $response['numRowsReceived'];
+
+                unset($csvContent); // couldn't harm (http://php.net/manual/en/features.gc.php)
+                $csvContent = '';
+            }
+
+            $csvContent .= $csvRow;
+            unset($csvRow);
+        }
+
+        if (strlen($csvContent)) {
+            // upload the last remaining chunk
+            $response = $uploadServiceResource->import($tableId, $csvContent, $importParams);
+            $rowCount += $response['numRowsReceived'];
+        }
 
         return $rowCount;
     }

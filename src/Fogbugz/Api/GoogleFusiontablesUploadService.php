@@ -17,6 +17,21 @@ namespace Fogbugz\Api;
 
 class GoogleFusionTablesUploadService extends \Google_Service
 {
+    // import parameter names
+    const
+        PARAM_STARTLINE = 'startLine',
+        PARAM_STRICT    = 'isStrict',
+        PARAM_ENCODING  = 'encoding',
+        PARAM_DELIMITER = 'delimiter',
+        PARAM_ENDLINE   = 'endLine'
+    ;
+
+    // import parameter values
+    const
+        PARAM_ENCODING_UTF8         = 'UTF-8',
+        PARAM_ENCODING_AUTODETECT   = 'auto-detect'
+    ;
+
     /**
      * @var GoogleTableUploadServiceResource
      */
@@ -40,6 +55,31 @@ class GoogleFusionTablesUploadService extends \Google_Service
                       "parameters":{
                          "tableId":{
                             "required":true,
+                            "type":"string",
+                            "location":"path"
+                         },
+                         "encoding":{
+                            "required":false,
+                            "type":"string",
+                            "location":"path"
+                         },
+                         "delimiter":{
+                            "required":false,
+                            "type":"string",
+                            "location":"path"
+                         },
+                         "isStrict":{
+                            "required":false,
+                            "type":"boolean",
+                            "location":"path"
+                         },
+                         "startLine":{
+                            "required":false,
+                            "type":"string",
+                            "location":"path"
+                         },
+                         "endLine":{
+                            "required":false,
                             "type":"string",
                             "location":"path"
                          }
