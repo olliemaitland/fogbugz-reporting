@@ -39,7 +39,7 @@ class PushWorklogsCommand extends ByngCommand
         $this
             ->setName('push:worklogs')
             ->addArgument(self::CSV_PATH, InputArgument::REQUIRED, 'Path to CSV generated with pull:worklogs command to be uploaded')
-            ->addArgument(self::TABLE_ID, InputArgument::REQUIRED, 'Google Fusion table ID to load data into')
+            ->addArgument(self::TABLE_ID, InputArgument::OPTIONAL, 'Google Fusion table ID to load data into')
         ;
     }
 
@@ -139,8 +139,12 @@ class PushWorklogsCommand extends ByngCommand
 
         // check table ID to prevent "SQL" injection
         // sample id 1X4PBLYxV_msgowgDMMWpO_SULzbeJ5mjKGy2Ccw
-        if (!preg_match('/^[0-9a-zA-Z_]+$/', $args[self::TABLE_ID])) {
-            throw new \Exception('Fusion table ID seems to be invalid');
+        if (strlen($args[self::TABLE_ID])) {
+            if (!preg_match('/^[0-9a-zA-Z_]+$/', $args[self::TABLE_ID])) {
+                throw new \Exception('Fusion table ID seems to be invalid');
+            }
+        } else {
+            $args[self::TABLE_ID] = null;
         }
 
         return $args;
@@ -152,7 +156,15 @@ class PushWorklogsCommand extends ByngCommand
         $csvHandle = fopen($args[self::CSV_PATH], 'r'); // not checking result here as getArguments() is safe
 
         $client = $this->getGoogleClient();
+
+        // create new table if needed
+        if (is_null($args[self::TABLE_ID])) {
+            $args[self::TABLE_ID] = $client->createTable('Fogbugz import ' . date('Y-m-d H:i:s'));
+            $output->writeln(sprintf('<info>%s table has been created</info>', $args[self::TABLE_ID]));
+        }
+
         $rowCount = $client->csvToTable($csvHandle, $args[self::TABLE_ID]);
-        $output->writeln(sprintf('<info>%s records pushed to Fusion Tables</info>', $rowCount));
+        $output->writeln(sprintf('<info>%s records pushed to Fusion Table %s</info>', $rowCount, $args[self::TABLE_ID]));
+        $output->writeln(sprintf('View results at %s', Api\GoogleClient::getFusionTableUserUrl($args[self::TABLE_ID])));
     }
 }

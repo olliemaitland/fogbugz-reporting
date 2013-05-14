@@ -15,16 +15,13 @@ class GoogleClient
     // name of the application in Google stats etc.
     const GOOGLE_APP_NAME = 'Byng FogBugz Reporting Tool';
 
-    // Google API constants for KIND properties of created objects
-    const
-        KIND_TABLE  = 'fusiontables#table',
-        KIND_COLUMN = 'fusiontables#column'
-    ;
+    // permission flags
+    const PERMISSION_READER = 'reader';
 
     // supported column tables
     // strangely no constants in vendor API
     const
-        COL_TYPE_TEXT   = 'TEXT',
+        COL_TYPE_TEXT   = 'STRING',
         COL_TYPE_NUMBER = 'NUMBER',
         COL_TYPE_DATE   = 'DATETIME'
     ;
@@ -37,12 +34,18 @@ class GoogleClient
         TABLE_COL_PERSON    = 'Person'
     ;
 
-    // default table structure
+    // default table structure - column names and types
     protected static $columns = array(
         self::TABLE_COL_PROJECT => self::COL_TYPE_TEXT,
-        // self::TABLE_COL_DAY     => self::COL_TYPE_DATE,
-        // self::TABLE_COL_HOURS   => self::COL_TYPE_NUMBER,
-        // self::TABLE_COL_PERSON  => self::COL_TYPE_TEXT
+        self::TABLE_COL_DAY     => self::COL_TYPE_DATE,
+        self::TABLE_COL_HOURS   => self::COL_TYPE_NUMBER,
+        self::TABLE_COL_PERSON  => self::COL_TYPE_TEXT
+    );
+
+    // Google API scopes we need
+    protected static $scopes = array(
+        'https://www.googleapis.com/auth/fusiontables',
+        'https://www.googleapis.com/auth/drive' // @todo: this permission can be probably narrowed down
     );
 
     /**
@@ -56,6 +59,8 @@ class GoogleClient
      * @var string|null
      */
     protected $oauthToken = null;
+
+    protected $drive = null;
 
     /**
      * @return \Google_Client|null
@@ -84,16 +89,18 @@ class GoogleClient
      */
     public function __construct($token, $clientId, $accountName, $privateKey, $keySecret)
     {
+        $credentials = new \Google_AssertionCredentials(
+            $accountName,
+            self::$scopes,
+            $privateKey,
+            $keySecret
+        );
+
         $client = new \Google_Client();
         $client->setClientId($clientId);
         $client->setApplicationName(self::GOOGLE_APP_NAME);
 
-        $client->setAssertionCredentials(new \Google_AssertionCredentials(
-            $accountName,
-            array('https://www.googleapis.com/auth/fusiontables'),
-            $privateKey,
-            $keySecret
-        ));
+        $client->setAssertionCredentials($credentials);
 
         $updateToken = true;
         if (!is_null($token)) {
@@ -159,7 +166,6 @@ class GoogleClient
             $column = new \Google_Column();
             $column->setName($colName);
             $column->setType($type);
-            // $column->setKind(self::KIND_COLUMN);
 
             $columns[] = $column;
         }
@@ -172,26 +178,32 @@ class GoogleClient
      *
      * @param   string  $name
      *
-     * @return  array
+     * @return  string
      */
     public function createTable($name)
     {
-        $columns = self::getDefaultColumns();
+        $drive = new \Google_DriveService($this->client);
+        $fusionTables = new \Google_FusiontablesService($this->client);
 
+        $columns = self::getDefaultColumns();
         $table = new \Google_Table();
         $table->setName($name);
         $table->setColumns($columns);
-        // $table->setKind(self::KIND_TABLE);
-        $table->setDescription('Created by ' . self::GOOGLE_APP_NAME .' on ' . date('Y-m-d H:i:s'));
+        $table->setDescription('Created by ' . self::GOOGLE_APP_NAME . ' on ' . date('Y-m-d H:i:s'));
         $table->setIsExportable(true);
 
-        $fusionTables = new \Google_FusiontablesService($this->client);
-
         $result = $fusionTables->table->insert($table);
+        $tableId = $result['tableId'];
 
-        // $table = $fusionTables->table->get($name);
+        // new table is created private by default, now we need to share it with who we want
+        $permission = new \Google_Permission();
+        $permission->setRole('writer');
+        $permission->setType('user');
+        $permission->setValue('akopov@gmail.com');
 
-        return $result;
+        $result = $drive->permissions->insert($tableId, $permission);
+
+        return $tableId;
     }
 
     /**
@@ -288,5 +300,17 @@ class GoogleClient
         }
 
         return $rowCount;
+    }
+
+    /**
+     * Returns URL for given Fusion Table user interface
+     *
+     * @param   string  $tableId
+     *
+     * @return string
+     */
+    public static function getFusionTableUserUrl($tableId)
+    {
+        return sprintf('https://www.google.com/fusiontables/data?docid=%s#rows:id=1', $tableId);
     }
 }
