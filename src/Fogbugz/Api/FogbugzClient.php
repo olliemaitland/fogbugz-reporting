@@ -96,13 +96,7 @@ class FogbugzClient extends BaseClient
         $intervalTags = $xml->intervals[0];
 
         foreach ($intervalTags as $intervalTag) {
-
-            $interval = new \Fogbugz\Entities\Interval();
-            $interval->case     = (string) $intervalTag->ixBug;
-            $interval->start    = (string) $intervalTag->dtStart;
-            $interval->end      = (string) $intervalTag->dtEnd;
-            $interval->person   = (string) $intervalTag->ixPerson;
-
+            $interval = new \Fogbugz\Entities\Interval($intervalTag);
             $intervals[] = $interval;
         }
 

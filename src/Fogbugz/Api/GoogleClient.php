@@ -31,7 +31,8 @@ class GoogleClient
         TABLE_COL_PROJECT   = 'Project',
         TABLE_COL_DAY       = 'Day',
         TABLE_COL_HOURS     = 'Hours',
-        TABLE_COL_PERSON    = 'Person'
+        TABLE_COL_PERSON    = 'Person',
+        TABLE_COL_WEEK      = 'Week'
     ;
 
     // default table structure - column names and types
@@ -39,7 +40,8 @@ class GoogleClient
         self::TABLE_COL_PROJECT => self::COL_TYPE_TEXT,
         self::TABLE_COL_DAY     => self::COL_TYPE_DATE,
         self::TABLE_COL_HOURS   => self::COL_TYPE_NUMBER,
-        self::TABLE_COL_PERSON  => self::COL_TYPE_TEXT
+        self::TABLE_COL_PERSON  => self::COL_TYPE_TEXT,
+        self::TABLE_COL_WEEK    => self::COL_TYPE_DATE
     );
 
     // Google API scopes we need
@@ -120,40 +122,6 @@ class GoogleClient
     }
 
     /**
-     * Returns INSERT statement to add the CSV row given into the specified Fusion table
-     *
-     * @param   string  $tableId
-     * @param   array   $csvRow
-     *
-     * @return  string
-     * @throws  \Exception
-     */
-    protected function getInsertStatement($tableId, array $csvRow)
-    {
-        if (count($csvRow) !== count(self::$columns)) {
-            throw new \Exception('Wrong number of fields in the record');
-        }
-
-        // escape values to be inserted
-        // table ID is not escape as it is supposed to be obtained in a safe way
-        foreach ($csvRow as $key => $value) {
-            $csvRow[$key] = addslashes($value);
-        }
-
-        // @todo: tableId is not sanitised because it doesn't come from file input, but maybe it should be?
-
-        $sql =
-            'INSERT INTO ' . $tableId . ' (' .
-            implode(',', self::$columns) .
-            ") VALUES ('" .
-            implode("','", $csvRow) .
-            "')"
-        ;
-
-        return $sql;
-    }
-
-    /**
      * Returns a set of default columns (e.g. to create a new)
      *
      * @return  \Google_Column[]
@@ -198,8 +166,8 @@ class GoogleClient
         // new table is created private by default, now we need to share it with who we want
         $permission = new \Google_Permission();
         $permission->setRole('writer');
-        $permission->setType('user');
-        $permission->setValue('akopov@gmail.com');
+        $permission->setType('group');
+        $permission->setValue('byng-reports@googlegroups.com');
 
         $result = $drive->permissions->insert($tableId, $permission);
 
@@ -239,6 +207,16 @@ class GoogleClient
     }
 
     /**
+     * Returns column names for CSVs and Fusion Tables
+     *
+     * @return array
+     */
+    public static function getColumnTitles()
+    {
+        return array_keys(self::$columns);
+    }
+
+    /**
      * Inserts data from the specified CSV into a Fusion table
      * Uses custom implementation of importRows method as it doesn't work properly in vendor Google API package
      *
@@ -249,7 +227,7 @@ class GoogleClient
      * @return  int
      * @throws  \Exception
      */
-    public function csvToTable($csvHandle, $tableId, $hasHeaders = false)
+    public function csvToTable($csvHandle, $tableId, $hasHeaders = true)
     {
         // accessing the import service we will be callin the the process
         $uploadService = new GoogleFusiontablesUploadService($this->client);
@@ -266,8 +244,10 @@ class GoogleClient
         if (!$hasHeaders) {
             // first line would be discarded by Fusion Tables so we need to start with a non-meaningful line
             // can't be just an empty line (even isStrict=false) seem still require the right number of headers
-            $csvContent .= implode(',', array_keys(self::$columns)) . PHP_EOL;
+            $csvContent .= implode(',', self::getColumnTitles()) . PHP_EOL;
         }
+
+        gc_enable();
 
         // processing the CSV in maybe an unnecessarily sophisticated way, but that should allow to handling long CSVs
         $rowCount = 0;
@@ -283,6 +263,8 @@ class GoogleClient
 
                 unset($csvContent); // couldn't harm (http://php.net/manual/en/features.gc.php)
                 $csvContent = '';
+
+                gc_collect_cycles();
             }
 
             $csvContent .= $csvRow;
@@ -294,6 +276,8 @@ class GoogleClient
             $response = $uploadServiceResource->import($tableId, $csvContent, $importParams);
             $rowCount += $response[GoogleTableImportResult::RESULT_NUMROWS];
         }
+
+        gc_disable();
 
         if (!$hasHeaders and ($rowCount > 0)) {
             $rowCount--;

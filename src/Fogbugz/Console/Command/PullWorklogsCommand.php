@@ -9,6 +9,7 @@
 
 namespace Fogbugz\Console\Command;
 
+use Fogbugz\Api\GoogleClient;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
@@ -22,8 +23,6 @@ class PullWorklogsCommand extends ByngCommand
         DATE_END    = 'end-date',
         CSV_FOLDER  = 'csv-folder'
     ;
-
-    const DEFAULT_DATE_FORMAT = 'Y-m-d';
 
     const DEFAULT_FOLDER = 'resources/csvs';
 
@@ -70,7 +69,7 @@ class PullWorklogsCommand extends ByngCommand
      */
     protected function getCsvFilename(\DateTime $start, \DateTime $end)
     {
-        $filename = sprintf('fogbugz-hours_%s_%s.csv', $start->format(self::DEFAULT_DATE_FORMAT), $end->format(self::DEFAULT_DATE_FORMAT));
+        $filename = sprintf('fogbugz-hours_%s_%s.csv', $start->format(\Fogbugz\Entities\Interval::DATE_FORMAT), $end->format(\Fogbugz\Entities\Interval::DATE_FORMAT));
         return $filename;
     }
 
@@ -82,12 +81,12 @@ class PullWorklogsCommand extends ByngCommand
         $client = new \Fogbugz\Api\FogbugzClient($config);
 
         // get worklogs
-        $start  = \DateTime::createFromFormat(self::DEFAULT_DATE_FORMAT, $args[self::DATE_START]);
+        $start  = \DateTime::createFromFormat(\Fogbugz\Entities\Interval::DATE_FORMAT, $args[self::DATE_START]);
 
         if ($args[self::DATE_END]) {
-            $end = \DateTime::createFromFormat(self::DEFAULT_DATE_FORMAT, $args[self::DATE_END]);
+            $end = \DateTime::createFromFormat(\Fogbugz\Entities\Interval::DATE_FORMAT, $args[self::DATE_END]);
         } else {
-            $end = new \DateTime();
+            $end = $start;
         }
 
         $intervals = $client->getWorklogs($start, $end);    // @todo: this is dangerous as big interval would hit memory limit
@@ -95,6 +94,8 @@ class PullWorklogsCommand extends ByngCommand
 
         $i = 0;
         $fp = fopen($csvPath, 'w');
+        fputcsv($fp, GoogleClient::getColumnTitles());
+
         foreach ($intervals as $interval) {
             // get project for each case
             $project = $client->getProjectFromCase($interval->case);
@@ -102,9 +103,10 @@ class PullWorklogsCommand extends ByngCommand
 
             fputcsv($fp, array (
                 $project,
-                date(self::DEFAULT_DATE_FORMAT, strtotime($interval->start)),
+                $interval->getStartDay(),
                 $interval->getDurationHours(),
-                $person
+                $person,
+                $interval->getStartWeek()
             ));
 
             $i++;
